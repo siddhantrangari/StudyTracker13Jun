@@ -1,14 +1,15 @@
 /**
- * StudyTrack - Core Application Script with Supabase Cloud Sync
+ * StudyTrack - Core Application Script with Supabase & Razorpay
  * Built for UPSC, JEE, and NEET aspirants.
  */
 
 // ==========================================
-// SUPABASE CONFIGURATION
+// CONFIGURATIONS (Supabase & Razorpay)
 // ==========================================
-// Paste your Supabase credentials here to sync to the database
 const SUPABASE_URL = 'https://qoxchejkzofmertijutx.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFveGNoZWprem9mbWVydGlqdXR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzMzA3MTQsImV4cCI6MjA5NjkwNjcxNH0.uK9mB0_Dl-ctUWU8ffE1-ZCZyV1f-Iu3gXb5gbXerws'; // Replace with your actual anon public key from Supabase settings
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFveGNoZWprem9mbWVydGlqdXR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzMzA3MTQsImV4cCI6MjA5NjkwNjcxNH0.uK9mB0_Dl-ctUWU8ffE1-ZCZyV1f-Iu3gXb5gbXerws'; // Configured Anon Public key
+
+const RAZORPAY_KEY_ID = 'rzp_test_SwqquWZp1VDDGx'; // Razorpay Test Key ID
 
 let supabaseClient = null;
 const isSupabaseConfigured = SUPABASE_ANON_KEY && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
@@ -23,7 +24,7 @@ if (isSupabaseConfigured && window.supabase) {
 }
 
 // ==========================================
-// 1. OFFLINE LOCAL STORAGE FALLBACK
+// 1. OFFLINE LOCAL STORAGE FALLBACK DB
 // ==========================================
 const LocalDB = {
   _get(key) {
@@ -146,7 +147,7 @@ const LocalDB = {
 };
 
 // ==========================================
-// 2. UNIFIED DATABASE ADAPTER (SUPABASE / LOCAL FALLBACK)
+// 2. UNIFIED DATABASE ADAPTER (SUPABASE / LOCAL)
 // ==========================================
 const DB = {
   isCloud() {
@@ -167,6 +168,53 @@ const DB = {
     }
   },
 
+  // Premium Management
+  async isPremium(userId) {
+    if (this.isCloud()) {
+      try {
+        const { data, error } = await supabaseClient
+          .from('profiles')
+          .select('is_premium')
+          .eq('id', userId)
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) {
+          // Auto-initialize profile record
+          await supabaseClient.from('profiles').insert([{ id: userId, is_premium: false }]);
+          return false;
+        }
+        return !!data.is_premium;
+      } catch (err) {
+        console.error('Error fetching profiles premium status:', err);
+        return false;
+      }
+    } else {
+      const users = LocalDB.getUsers();
+      const user = users.find(u => u.email.toLowerCase() === userId.toLowerCase());
+      return user ? !!user.isPremium : false;
+    }
+  },
+
+  async setPremium(userId, status = true) {
+    if (this.isCloud()) {
+      const { error } = await supabaseClient
+        .from('profiles')
+        .upsert({ id: userId, is_premium: status });
+      if (error) {
+        console.error('Supabase setPremium failed:', error);
+        throw error;
+      }
+    } else {
+      const users = LocalDB.getUsers();
+      const userIndex = users.findIndex(u => u.email.toLowerCase() === userId.toLowerCase());
+      if (userIndex !== -1) {
+        users[userIndex].isPremium = status;
+        LocalDB._set('studytrack_users', users);
+      }
+    }
+  },
+
+  // Subjects
   async getSubjects(userId) {
     if (this.isCloud()) {
       const { data, error } = await supabaseClient
@@ -224,6 +272,7 @@ const DB = {
     }
   },
 
+  // Study Sessions
   async getStudySessions(userId) {
     if (this.isCloud()) {
       const { data, error } = await supabaseClient
@@ -286,7 +335,6 @@ const DB = {
     }
   },
 
-  // Transient Timer persistence is kept in localStorage, keyed by unique userId
   getActiveTimer(userId) {
     return LocalDB.getActiveTimer(userId);
   },
@@ -352,7 +400,7 @@ const Utils = {
 // 4. MAIN APPLICATION
 // ==========================================
 const App = {
-  currentUser: null, // Stores user.id (cloud) or userEmail (local)
+  currentUser: null,
   activeTimerInterval: null,
   activeTimerData: null,
 
@@ -365,7 +413,6 @@ const App = {
   },
 
   cacheDOM() {
-    // Layout Wrappers
     this.views = {
       landing: document.getElementById('landing-view'),
       auth: document.getElementById('auth-view'),
@@ -377,11 +424,9 @@ const App = {
       report: document.getElementById('report-panel')
     };
 
-    // Navigation menus
     this.navPublic = document.getElementById('public-nav');
     this.navPrivate = document.getElementById('private-nav');
     
-    // Auth Components
     this.authTabs = {
       login: document.getElementById('tab-login'),
       register: document.getElementById('tab-register')
@@ -393,11 +438,9 @@ const App = {
       register: document.getElementById('register-form')
     };
 
-    // Dashboard Items
     this.subjectsGrid = document.getElementById('subjects-grid');
     this.subjectsEmptyState = document.getElementById('subjects-empty-state');
     
-    // Timer Displays
     this.timerContainer = document.getElementById('study-timer-container');
     this.timerClock = document.getElementById('timer-clock-display');
     this.timerSubject = document.getElementById('timer-subject-display');
@@ -405,7 +448,6 @@ const App = {
     this.timerProgressRing = document.getElementById('timer-progress-ring');
     this.timerStopBtn = document.getElementById('timer-stop-btn');
 
-    // Dialog Elements
     this.addSubjectDialog = document.getElementById('add-subject-dialog');
     this.addSubjectForm = document.getElementById('add-subject-form');
     this.colorPickerGrid = document.getElementById('color-picker-grid');
@@ -414,10 +456,8 @@ const App = {
   },
 
   bindEvents() {
-    // Nav Routing Bindings
     window.addEventListener('hashchange', () => this.handleRouting());
 
-    // Public header clicks
     document.getElementById('logo-link').addEventListener('click', (e) => {
       e.preventDefault();
       window.location.hash = this.currentUser ? '#dashboard' : '#home';
@@ -443,14 +483,12 @@ const App = {
       window.location.hash = '#auth';
     });
 
-    // Logout actions
     const logoutAction = () => {
       this.logout();
     };
     document.getElementById('top-logout-btn').addEventListener('click', logoutAction);
     document.getElementById('side-logout-btn').addEventListener('click', logoutAction);
 
-    // Sidebar navigation clicks
     document.getElementById('side-dashboard').addEventListener('click', (e) => {
       e.preventDefault();
       window.location.hash = '#dashboard';
@@ -460,29 +498,23 @@ const App = {
       window.location.hash = '#report';
     });
 
-    // Auth forms tab switching
     this.authTabs.login.addEventListener('click', () => this.switchAuthTab('login'));
     this.authTabs.register.addEventListener('click', () => this.switchAuthTab('register'));
 
-    // Auth forms submissions
     this.authForms.login.addEventListener('submit', (e) => this.handleLogin(e));
     this.authForms.register.addEventListener('submit', (e) => this.handleRegister(e));
 
-    // Timer control buttons
     this.timerStopBtn.addEventListener('click', () => this.stopTimer());
 
-    // Dialog form submissions
     this.addSubjectForm.addEventListener('submit', (e) => this.handleAddSubjectSubmit(e));
 
-    // Handle Native Modals dismissal (backdrop click closing)
     this.addSubjectDialog.addEventListener('click', (e) => {
       if (e.target === this.addSubjectDialog) {
         this.addSubjectDialog.close();
       }
     });
 
-    // Listen for custom trigger attributes
-    document.addEventListener('click', (e) => {
+    document.addEventListener('click', async (e) => {
       const button = e.target.closest('button[commandfor]');
       if (!button) return;
 
@@ -492,6 +524,16 @@ const App = {
 
       if (dialog && dialog.tagName === 'DIALOG') {
         if (command === 'show-modal') {
+          // Free subject count limit check
+          const subjects = await DB.getSubjects(this.currentUser);
+          const isPremium = await DB.isPremium(this.currentUser);
+          
+          if (!isPremium && subjects.length >= 2) {
+            alert("Free accounts are limited to a maximum of 2 subjects. Upgrade to Premium to track unlimited subjects!");
+            this.triggerRazorpayPayment();
+            return;
+          }
+
           this.subjectNameInput.value = '';
           document.getElementById('subject-name-error').style.display = 'none';
           this.resetColorSelection();
@@ -576,6 +618,7 @@ const App = {
       document.querySelectorAll('.sidebar-link').forEach(link => link.classList.remove('active'));
       
       this.updateConnectionBadge();
+      this.renderPremiumState();
 
       if (hash === '#dashboard') {
         this.panels.dashboard.classList.remove('hidden');
@@ -632,6 +675,50 @@ const App = {
     }
   },
 
+  async renderPremiumState() {
+    if (!this.currentUser) return;
+    
+    const isPremium = await DB.isPremium(this.currentUser);
+    const sidebar = document.querySelector('.sidebar');
+    const profileMenu = document.querySelector('.user-profile-menu');
+    
+    // Remove existing upgrade panel if exists
+    const existingUpgrade = document.getElementById('sidebar-upgrade-box');
+    if (existingUpgrade) existingUpgrade.remove();
+
+    const roleEl = document.querySelector('.user-role');
+
+    if (isPremium) {
+      if (roleEl) {
+        roleEl.innerHTML = `<span class="badge-premium"><i class="fa-solid fa-crown"></i> Premium Member</span>`;
+      }
+    } else {
+      if (roleEl) {
+        roleEl.textContent = 'Free Account';
+      }
+
+      // Add Gold upgrade callout banner to the sidebar
+      const upgradeBox = document.createElement('div');
+      upgradeBox.id = 'sidebar-upgrade-box';
+      upgradeBox.className = 'sidebar-upgrade-box';
+      upgradeBox.innerHTML = `
+        <h4><i class="fa-solid fa-star"></i> Go Premium</h4>
+        <p>Unlock Weekly Report charts, detailed history logs, and create unlimited subjects.</p>
+        <button class="btn btn-accent btn-sm" id="sidebar-upgrade-btn" style="width: 100%;">
+          Upgrade for ₹199
+        </button>
+      `;
+
+      upgradeBox.querySelector('#sidebar-upgrade-btn').addEventListener('click', () => {
+        this.triggerRazorpayPayment();
+      });
+
+      if (sidebar && profileMenu) {
+        sidebar.insertBefore(upgradeBox, profileMenu);
+      }
+    }
+  },
+
   showAuthWarningIfOffline() {
     const authCard = document.querySelector('.auth-card');
     if (!authCard) return;
@@ -665,7 +752,51 @@ const App = {
   },
 
   // ==========================================
-  // 5. AUTHENTICATION CONTROLLER
+  // 5. PAYMENT INTEGRATION (RAZORPAY)
+  // ==========================================
+  triggerRazorpayPayment() {
+    const userEmail = document.getElementById('user-display-email').textContent || '';
+    
+    const options = {
+      "key": RAZORPAY_KEY_ID,
+      "amount": "19900", // ₹199 in subunits (paise)
+      "currency": "INR",
+      "name": "StudyTrack",
+      "description": "Unlock Premium Exam Prep Tools",
+      "image": "https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.0.0/svgs/solid/graduation-cap.svg",
+      "handler": async (response) => {
+        console.log("Payment success, upgrading user:", response.razorpay_payment_id);
+        try {
+          await DB.setPremium(this.currentUser, true);
+          alert("Payment Successful! Your account has been upgraded to Premium. Start tracking unlimited subjects now!");
+          
+          // Refresh views and state
+          await this.renderPremiumState();
+          this.handleRouting();
+        } catch (err) {
+          console.error("Upgrade registration failed:", err);
+          alert("An error occurred during account upgrade: " + err.message);
+        }
+      },
+      "prefill": {
+        "email": userEmail
+      },
+      "theme": {
+        "color": "#6366f1"
+      }
+    };
+    
+    try {
+      const rzp = new Razorpay(options);
+      rzp.open();
+    } catch (err) {
+      console.error("Failed to open Razorpay payment window:", err);
+      alert("Could not load payment gateway. Please check your internet connection.");
+    }
+  },
+
+  // ==========================================
+  // 6. AUTHENTICATION CONTROLLER
   // ==========================================
   async handleLogin(e) {
     e.preventDefault();
@@ -720,7 +851,6 @@ const App = {
         loginBtn.innerHTML = originalText;
       }
     } else {
-      // Local Auth Fallback
       const user = LocalDB.getUserByEmail(email);
       if (user && user.password === password) {
         LocalDB.setCurrentUser(email);
@@ -781,14 +911,12 @@ const App = {
 
         if (error) throw error;
 
-        // Auto login on successful register if session is active
         if (data.session) {
           this.currentUser = data.user.id;
           document.getElementById('user-display-email').textContent = data.user.email;
           this.authForms.register.reset();
           window.location.hash = '#dashboard';
         } else {
-          // Email verification enabled
           alert("Account registered successfully! Please check your email inbox to verify your account, then log in.");
           this.authForms.register.reset();
           this.switchAuthTab('login');
@@ -804,7 +932,6 @@ const App = {
         regBtn.innerHTML = originalText;
       }
     } else {
-      // Local Auth Fallback
       const existing = LocalDB.getUserByEmail(email);
       if (existing) {
         const err = document.getElementById('register-general-error');
@@ -816,6 +943,7 @@ const App = {
       LocalDB.saveUser({
         email,
         password,
+        isPremium: false, // Default false locally
         createdAt: new Date().toISOString()
       });
 
@@ -844,7 +972,7 @@ const App = {
   },
 
   // ==========================================
-  // 6. SUBJECT MANAGEMENT
+  // 7. SUBJECT MANAGEMENT
   // ==========================================
   async handleAddSubjectSubmit(e) {
     e.preventDefault();
@@ -867,7 +995,7 @@ const App = {
   },
 
   // ==========================================
-  // 7. DASHBOARD & STREAK CONTROLLER
+  // 8. DASHBOARD & STREAK CONTROLLER
   // ==========================================
   async initDashboard() {
     const user = await DB.getCurrentUser();
@@ -883,13 +1011,11 @@ const App = {
 
       document.getElementById('subjects-count-value').textContent = subjects.length;
 
-      // Total Study today
       const todayStr = Utils.toLocalISODate(new Date());
       const todaySessions = sessions.filter(s => s.date === todayStr);
       const todayTotalSeconds = todaySessions.reduce((acc, curr) => acc + curr.durationSeconds, 0);
       document.getElementById('total-today-value').textContent = Utils.formatDurationShort(todayTotalSeconds);
 
-      // Render Streak Metric & Dot Tracker
       const streak = this.calculateStreak(sessions);
       document.getElementById('streak-value').textContent = `${streak} Day${streak === 1 ? '' : 's'}`;
       
@@ -1070,7 +1196,7 @@ const App = {
   },
 
   // ==========================================
-  // 8. PERSISTENT FOCUS TIMER CONTROLLER
+  // 9. PERSISTENT FOCUS TIMER CONTROLLER
   // ==========================================
   checkAndResumeTimer(subjectsList = null) {
     const activeTimer = DB.getActiveTimer(this.currentUser);
@@ -1107,7 +1233,6 @@ const App = {
 
     this.startTimerTicker(subjectId, subjectName, startTime);
     
-    // Refresh grid state
     const refreshGrid = async () => {
       const subjects = await DB.getSubjects(this.currentUser);
       const sessions = await DB.getStudySessions(this.currentUser);
@@ -1187,16 +1312,69 @@ const App = {
   },
 
   // ==========================================
-  // 9. WEEKLY REPORT & CUSTOM SVG CHARTING
+  // 10. WEEKLY REPORT CONTROLLER (LOCKED IF FREE)
   // ==========================================
   async initWeeklyReport() {
-    try {
-      const subjects = await DB.getSubjects(this.currentUser);
-      const sessions = await DB.getStudySessions(this.currentUser);
+    const reportPanel = document.getElementById('report-panel');
+    
+    // Remove existing locked screen if any
+    const existingLock = document.getElementById('analytics-lock-screen');
+    if (existingLock) existingLock.remove();
+    
+    const chartCard = reportPanel.querySelector('.chart-card');
+    const historyCard = reportPanel.querySelector('.history-card');
+    const insightsCardParent = reportPanel.querySelector('.card:not(.chart-card):not(.history-card)').parentNode;
 
-      this.renderWeeklySVGChart(subjects, sessions);
-      this.renderWeeklyInsights(subjects, sessions);
-      this.renderSessionHistory(subjects, sessions);
+    try {
+      const isPremium = await DB.isPremium(this.currentUser);
+
+      if (!isPremium) {
+        // Hide stats panels
+        if (chartCard) chartCard.classList.add('hidden');
+        if (historyCard) historyCard.classList.add('hidden');
+        if (insightsCardParent) insightsCardParent.classList.add('hidden');
+
+        // Create Upgrade lock screen
+        const lockScreen = document.createElement('div');
+        lockScreen.id = 'analytics-lock-screen';
+        lockScreen.className = 'card locked-analytics-container';
+        lockScreen.innerHTML = `
+          <div class="locked-icon-box">
+            <i class="fa-solid fa-lock"></i>
+          </div>
+          <h2>Weekly Analytics is Locked</h2>
+          <p class="hero-subtitle">
+            Weekly study reports, subject distribution charts, and detailed session history logs are reserved for Premium members.
+          </p>
+          <div class="premium-feature-list">
+            <div class="premium-feature-item"><i class="fa-solid fa-circle-check"></i> Unlimited Core Subjects (Free limit: 2)</div>
+            <div class="premium-feature-item"><i class="fa-solid fa-circle-check"></i> Stacked Bar Chart Distribution</div>
+            <div class="premium-feature-item"><i class="fa-solid fa-circle-check"></i> Detailed Session History logs</div>
+            <div class="premium-feature-item"><i class="fa-solid fa-circle-check"></i> Delete accidental entries</div>
+          </div>
+          <button class="btn btn-accent" id="analytics-upgrade-btn" style="width: 100%; max-width: 320px;">
+            Upgrade to Premium for ₹199
+          </button>
+        `;
+
+        lockScreen.querySelector('#analytics-upgrade-btn').addEventListener('click', () => {
+          this.triggerRazorpayPayment();
+        });
+
+        reportPanel.appendChild(lockScreen);
+      } else {
+        // Show components
+        if (chartCard) chartCard.classList.remove('hidden');
+        if (historyCard) historyCard.classList.remove('hidden');
+        if (insightsCardParent) insightsCardParent.classList.remove('hidden');
+
+        const subjects = await DB.getSubjects(this.currentUser);
+        const sessions = await DB.getStudySessions(this.currentUser);
+
+        this.renderWeeklySVGChart(subjects, sessions);
+        this.renderWeeklyInsights(subjects, sessions);
+        this.renderSessionHistory(subjects, sessions);
+      }
     } catch (err) {
       console.error('Error loading weekly report:', err);
     }
