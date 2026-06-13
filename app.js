@@ -1,13 +1,31 @@
 /**
- * StudyTrack - Core Application Script
+ * StudyTrack - Core Application Script with Supabase Cloud Sync
  * Built for UPSC, JEE, and NEET aspirants.
  */
 
 // ==========================================
-// 1. DATABASE MANAGEMENT SYSTEM (localStorage)
+// SUPABASE CONFIGURATION
+// ==========================================
+// Paste your Supabase credentials here to sync to the database
+const SUPABASE_URL = 'https://qoxchejkzofmertijutx.supabase.co';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'; // Replace with your actual anon public key from Supabase settings
+
+let supabaseClient = null;
+const isSupabaseConfigured = SUPABASE_ANON_KEY && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
+
+if (isSupabaseConfigured && window.supabase) {
+  try {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    console.log('Supabase client initialized successfully.');
+  } catch (e) {
+    console.error('Error initializing Supabase client:', e);
+  }
+}
+
+// ==========================================
+// 1. OFFLINE LOCAL STORAGE FALLBACK
 // ==========================================
 const LocalDB = {
-  // Read and Write raw data
   _get(key) {
     try {
       const data = localStorage.getItem(key);
@@ -26,7 +44,6 @@ const LocalDB = {
     }
   },
 
-  // Users Schema
   getUsers() {
     return this._get('studytrack_users') || [];
   },
@@ -41,7 +58,6 @@ const LocalDB = {
     return this.getUsers().find(u => u.email.toLowerCase() === email.toLowerCase());
   },
 
-  // Active Session
   getCurrentUser() {
     return this._get('studytrack_active_user');
   },
@@ -54,7 +70,6 @@ const LocalDB = {
     localStorage.removeItem('studytrack_active_user');
   },
 
-  // Subjects Schema (Isolated by User Email)
   getSubjects(email) {
     const allSubjects = this._get('studytrack_subjects') || [];
     return allSubjects.filter(s => s.userEmail.toLowerCase() === email.toLowerCase());
@@ -73,7 +88,6 @@ const LocalDB = {
   },
 
   deleteSubject(email, id) {
-    // Also delete any sessions linked to this subject for hygiene
     const allSubjects = this._get('studytrack_subjects') || [];
     const filteredSubjects = allSubjects.filter(s => !(s.userEmail.toLowerCase() === email.toLowerCase() && s.id === id));
     this._set('studytrack_subjects', filteredSubjects);
@@ -82,14 +96,12 @@ const LocalDB = {
     const filteredSessions = allSessions.filter(s => !(s.userEmail.toLowerCase() === email.toLowerCase() && s.subjectId === id));
     this._set('studytrack_sessions', filteredSessions);
     
-    // Clear timer if active on this subject
     const activeTimer = this.getActiveTimer(email);
     if (activeTimer && activeTimer.subjectId === id) {
       this.clearActiveTimer(email);
     }
   },
 
-  // Study Sessions Schema (Isolated by User Email)
   getStudySessions(email) {
     const allSessions = this._get('studytrack_sessions') || [];
     return allSessions.filter(s => s.userEmail.toLowerCase() === email.toLowerCase());
@@ -104,7 +116,7 @@ const LocalDB = {
       startTime: session.startTime,
       endTime: session.endTime,
       durationSeconds: session.durationSeconds,
-      date: session.date // YYYY-MM-DD
+      date: session.date
     });
     this._set('studytrack_sessions', allSessions);
   },
@@ -115,7 +127,6 @@ const LocalDB = {
     this._set('studytrack_sessions', filteredSessions);
   },
 
-  // Persistent Timer State (Isolated by User Email)
   getActiveTimer(email) {
     const timers = this._get('studytrack_active_timers') || {};
     return timers[email.toLowerCase()] || null;
@@ -135,10 +146,164 @@ const LocalDB = {
 };
 
 // ==========================================
-// 2. HELPER UTILITIES
+// 2. UNIFIED DATABASE ADAPTER (SUPABASE / LOCAL FALLBACK)
+// ==========================================
+const DB = {
+  isCloud() {
+    return isSupabaseConfigured && supabaseClient !== null;
+  },
+
+  async getCurrentUser() {
+    if (this.isCloud()) {
+      const { data: { session }, error } = await supabaseClient.auth.getSession();
+      if (error) {
+        console.error('Supabase getSession failed:', error);
+        return null;
+      }
+      return session ? session.user : null;
+    } else {
+      const email = LocalDB.getCurrentUser();
+      return email ? { email, id: email } : null;
+    }
+  },
+
+  async getSubjects(userId) {
+    if (this.isCloud()) {
+      const { data, error } = await supabaseClient
+        .from('subjects')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (error) {
+        console.error('Supabase select subjects failed:', error);
+        throw error;
+      }
+      return data.map(s => ({
+        id: s.id,
+        userEmail: s.user_id,
+        name: s.name,
+        color: s.color,
+        createdAt: s.created_at
+      }));
+    } else {
+      return LocalDB.getSubjects(userId);
+    }
+  },
+
+  async addSubject(userId, subject) {
+    if (this.isCloud()) {
+      const { data, error } = await supabaseClient
+        .from('subjects')
+        .insert([{
+          user_id: userId,
+          name: subject.name,
+          color: subject.color
+        }])
+        .select();
+      if (error) {
+        console.error('Supabase insert subject failed:', error);
+        throw error;
+      }
+      return data[0];
+    } else {
+      return LocalDB.addSubject(userId, subject);
+    }
+  },
+
+  async deleteSubject(userId, id) {
+    if (this.isCloud()) {
+      const { error } = await supabaseClient
+        .from('subjects')
+        .delete()
+        .eq('id', id);
+      if (error) {
+        console.error('Supabase delete subject failed:', error);
+        throw error;
+      }
+    } else {
+      return LocalDB.deleteSubject(userId, id);
+    }
+  },
+
+  async getStudySessions(userId) {
+    if (this.isCloud()) {
+      const { data, error } = await supabaseClient
+        .from('study_sessions')
+        .select('*')
+        .order('start_time', { ascending: false });
+      if (error) {
+        console.error('Supabase select sessions failed:', error);
+        throw error;
+      }
+      return data.map(s => ({
+        id: s.id,
+        userEmail: s.user_id,
+        subjectId: s.subject_id,
+        startTime: parseInt(s.start_time),
+        endTime: parseInt(s.end_time),
+        durationSeconds: s.duration_seconds,
+        date: s.date
+      }));
+    } else {
+      return LocalDB.getStudySessions(userId);
+    }
+  },
+
+  async addStudySession(userId, session) {
+    if (this.isCloud()) {
+      const { data, error } = await supabaseClient
+        .from('study_sessions')
+        .insert([{
+          user_id: userId,
+          subject_id: session.subjectId,
+          start_time: session.startTime,
+          end_time: session.endTime,
+          duration_seconds: session.durationSeconds,
+          date: session.date
+        }])
+        .select();
+      if (error) {
+        console.error('Supabase insert session failed:', error);
+        throw error;
+      }
+      return data[0];
+    } else {
+      return LocalDB.addStudySession(userId, session);
+    }
+  },
+
+  async deleteStudySession(userId, id) {
+    if (this.isCloud()) {
+      const { error } = await supabaseClient
+        .from('study_sessions')
+        .delete()
+        .eq('id', id);
+      if (error) {
+        console.error('Supabase delete session failed:', error);
+        throw error;
+      }
+    } else {
+      return LocalDB.deleteStudySession(userId, id);
+    }
+  },
+
+  // Transient Timer persistence is kept in localStorage, keyed by unique userId
+  getActiveTimer(userId) {
+    return LocalDB.getActiveTimer(userId);
+  },
+
+  setActiveTimer(userId, timer) {
+    return LocalDB.setActiveTimer(userId, timer);
+  },
+
+  clearActiveTimer(userId) {
+    return LocalDB.clearActiveTimer(userId);
+  }
+};
+
+// ==========================================
+// 3. HELPER UTILITIES
 // ==========================================
 const Utils = {
-  // Format seconds to HH:MM:SS
   formatDuration(totalSeconds) {
     const hrs = Math.floor(totalSeconds / 3600);
     const mins = Math.floor((totalSeconds % 3600) / 60);
@@ -150,20 +315,17 @@ const Utils = {
     ].join(':');
   },
 
-  // Format seconds to shorthand "Xh Ym"
   formatDurationShort(totalSeconds) {
     const hrs = Math.floor(totalSeconds / 3600);
     const mins = Math.floor((totalSeconds % 3600) / 60);
     return `${hrs}h ${mins.toString().padStart(2, '0')}m`;
   },
 
-  // Format timestamp to user-friendly local date
   formatLocalDate(dateString) {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   },
 
-  // Format date to ISO date YYYY-MM-DD in local time
   toLocalISODate(date) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -171,13 +333,11 @@ const Utils = {
     return `${year}-${month}-${day}`;
   },
 
-  // Validate email address format
   validateEmail(email) {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return re.test(email);
   },
 
-  // Preset list of design colors for subjects
   presetColors: [
     '#6366f1', // Indigo
     '#ec4899', // Pink
@@ -189,18 +349,18 @@ const Utils = {
 };
 
 // ==========================================
-// 3. APPLICATION STATE & ROUTING
+// 4. MAIN APPLICATION
 // ==========================================
 const App = {
-  currentUser: null,
+  currentUser: null, // Stores user.id (cloud) or userEmail (local)
   activeTimerInterval: null,
   activeTimerData: null,
 
-  init() {
+  async init() {
     this.cacheDOM();
     this.bindEvents();
     this.initColorPicker();
-    this.checkSession();
+    await this.checkSession();
     this.handleRouting();
   },
 
@@ -321,7 +481,7 @@ const App = {
       }
     });
 
-    // Listen for custom trigger attributes (using modern Invoker commands manual fallback styling)
+    // Listen for custom trigger attributes
     document.addEventListener('click', (e) => {
       const button = e.target.closest('button[commandfor]');
       if (!button) return;
@@ -332,7 +492,6 @@ const App = {
 
       if (dialog && dialog.tagName === 'DIALOG') {
         if (command === 'show-modal') {
-          // Clear previous states before opening
           this.subjectNameInput.value = '';
           document.getElementById('subject-name-error').style.display = 'none';
           this.resetColorSelection();
@@ -344,7 +503,6 @@ const App = {
     });
   },
 
-  // Color picker initialization
   initColorPicker() {
     this.colorPickerGrid.innerHTML = '';
     Utils.presetColors.forEach((color, index) => {
@@ -373,40 +531,32 @@ const App = {
     }
   },
 
-  // Check if session is logged in
-  checkSession() {
-    const sessionEmail = LocalDB.getCurrentUser();
-    if (sessionEmail) {
-      this.currentUser = sessionEmail;
-      document.getElementById('user-display-email').textContent = sessionEmail;
+  async checkSession() {
+    const user = await DB.getCurrentUser();
+    if (user) {
+      this.currentUser = DB.isCloud() ? user.id : user.email;
+      document.getElementById('user-display-email').textContent = user.email;
     } else {
       this.currentUser = null;
     }
   },
 
-  // Routing mechanism
   handleRouting() {
     const hash = window.location.hash || '#home';
     
-    // Auth guard for protected routes
     if ((hash === '#dashboard' || hash === '#report') && !this.currentUser) {
       window.location.hash = '#auth';
       return;
     }
 
-    // Redirect to dashboard if logged in and visiting landing/auth
     if ((hash === '#home' || hash === '#auth') && this.currentUser) {
       window.location.hash = '#dashboard';
       return;
     }
 
-    // Hide all views
     Object.values(this.views).forEach(v => v.classList.remove('active'));
-
-    // Reset top nav links active states
     document.getElementById('nav-home').classList.remove('active');
 
-    // Route view rendering
     if (hash === '#home') {
       this.views.landing.classList.add('active');
       document.getElementById('nav-home').classList.add('active');
@@ -416,15 +566,17 @@ const App = {
       this.views.auth.classList.add('active');
       this.navPublic.classList.remove('hidden');
       this.navPrivate.classList.add('hidden');
+      this.showAuthWarningIfOffline();
     } else if (hash === '#dashboard' || hash === '#report') {
       this.views.app.classList.add('active');
       this.navPublic.classList.add('hidden');
       this.navPrivate.classList.remove('hidden');
 
-      // Toggle internal panels
       Object.values(this.panels).forEach(p => p.classList.add('hidden'));
       document.querySelectorAll('.sidebar-link').forEach(link => link.classList.remove('active'));
       
+      this.updateConnectionBadge();
+
       if (hash === '#dashboard') {
         this.panels.dashboard.classList.remove('hidden');
         document.getElementById('side-dashboard').classList.add('active');
@@ -443,7 +595,6 @@ const App = {
     this.authForms.loginWrapper.classList.remove('active');
     this.authForms.registerWrapper.classList.remove('active');
 
-    // Clear previous error states
     document.getElementById('login-general-error').style.display = 'none';
     document.getElementById('register-general-error').style.display = 'none';
     document.querySelectorAll('.form-error').forEach(e => e.style.display = 'none');
@@ -457,10 +608,66 @@ const App = {
     }
   },
 
+  updateConnectionBadge() {
+    const badge = document.getElementById('connection-mode-badge') || (() => {
+      const parent = document.querySelector('.user-info');
+      if (!parent) return null;
+      const el = document.createElement('span');
+      el.id = 'connection-mode-badge';
+      el.className = 'user-role';
+      el.style.marginTop = '0.25rem';
+      el.style.display = 'inline-flex';
+      el.style.alignItems = 'center';
+      el.style.gap = '0.25rem';
+      parent.appendChild(el);
+      return el;
+    })();
+
+    if (!badge) return;
+
+    if (DB.isCloud()) {
+      badge.innerHTML = `<span style="color: var(--success); font-weight:600;"><i class="fa-solid fa-cloud"></i> Cloud Sync (Supabase)</span>`;
+    } else {
+      badge.innerHTML = `<span style="color: var(--text-muted); font-weight:500;"><i class="fa-solid fa-hard-drive"></i> Offline Demo Mode</span>`;
+    }
+  },
+
+  showAuthWarningIfOffline() {
+    const authCard = document.querySelector('.auth-card');
+    if (!authCard) return;
+
+    let warning = document.getElementById('offline-warning-banner');
+    if (warning) {
+      if (DB.isCloud()) {
+        warning.remove();
+      }
+      return;
+    }
+
+    if (!DB.isCloud()) {
+      warning = document.createElement('div');
+      warning.id = 'offline-warning-banner';
+      warning.style.background = 'rgba(245, 158, 11, 0.1)';
+      warning.style.border = '1px solid rgba(245, 158, 11, 0.25)';
+      warning.style.borderRadius = '8px';
+      warning.style.padding = '0.75rem';
+      warning.style.marginBottom = '1.5rem';
+      warning.style.fontSize = '0.8rem';
+      warning.style.color = '#f59e0b';
+      warning.style.lineHeight = '1.4';
+      warning.innerHTML = `
+        <i class="fa-solid fa-triangle-exclamation"></i> 
+        <strong>Offline Demo Mode Active.</strong> Data is stored locally in this browser. 
+        To sync with Supabase, open <code style="background:rgba(255,255,255,0.05); padding:2px 4px; border-radius:4px;">app.js</code> and paste your <strong>Anon Key</strong>.
+      `;
+      authCard.insertBefore(warning, authCard.firstChild);
+    }
+  },
+
   // ==========================================
-  // 4. AUTHENTICATION CONTROLLER
+  // 5. AUTHENTICATION CONTROLLER
   // ==========================================
-  handleLogin(e) {
+  async handleLogin(e) {
     e.preventDefault();
     const email = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
@@ -483,26 +690,53 @@ const App = {
 
     if (!isValid) return;
 
-    const user = LocalDB.getUserByEmail(email);
-    // Simple client side authentication check
-    if (user && user.password === password) {
-      LocalDB.setCurrentUser(email);
-      this.currentUser = email;
-      document.getElementById('user-display-email').textContent = email;
-      
-      // Reset forms
-      this.authForms.login.reset();
-      
-      // Route
-      window.location.hash = '#dashboard';
+    if (DB.isCloud()) {
+      const loginBtn = e.target.querySelector('button[type="submit"]');
+      const originalText = loginBtn.innerHTML;
+      loginBtn.disabled = true;
+      loginBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Logging in...';
+
+      try {
+        const { data, error } = await supabaseClient.auth.signInWithPassword({
+          email,
+          password
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        this.currentUser = data.user.id;
+        document.getElementById('user-display-email').textContent = data.user.email;
+        this.authForms.login.reset();
+        window.location.hash = '#dashboard';
+      } catch (err) {
+        console.error('Supabase login error:', err);
+        const errEl = document.getElementById('login-general-error');
+        errEl.textContent = err.message || "Invalid credentials. Please try again.";
+        errEl.style.display = 'block';
+      } finally {
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = originalText;
+      }
     } else {
-      const err = document.getElementById('login-general-error');
-      err.textContent = "Incorrect email address or password. Please try again.";
-      err.style.display = 'block';
+      // Local Auth Fallback
+      const user = LocalDB.getUserByEmail(email);
+      if (user && user.password === password) {
+        LocalDB.setCurrentUser(email);
+        this.currentUser = email;
+        document.getElementById('user-display-email').textContent = email;
+        this.authForms.login.reset();
+        window.location.hash = '#dashboard';
+      } else {
+        const err = document.getElementById('login-general-error');
+        err.textContent = "Incorrect email address or password. Please try again.";
+        err.style.display = 'block';
+      }
     }
   },
 
-  handleRegister(e) {
+  async handleRegister(e) {
     e.preventDefault();
     const email = document.getElementById('register-email').value.trim();
     const password = document.getElementById('register-password').value;
@@ -533,51 +767,86 @@ const App = {
 
     if (!isValid) return;
 
-    // Check email uniqueness
-    const existing = LocalDB.getUserByEmail(email);
-    if (existing) {
-      const err = document.getElementById('register-general-error');
-      err.textContent = "Email address already registered. Please log in.";
-      err.style.display = 'block';
-      return;
+    if (DB.isCloud()) {
+      const regBtn = e.target.querySelector('button[type="submit"]');
+      const originalText = regBtn.innerHTML;
+      regBtn.disabled = true;
+      regBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Creating...';
+
+      try {
+        const { data, error } = await supabaseClient.auth.signUp({
+          email,
+          password
+        });
+
+        if (error) throw error;
+
+        // Auto login on successful register if session is active
+        if (data.session) {
+          this.currentUser = data.user.id;
+          document.getElementById('user-display-email').textContent = data.user.email;
+          this.authForms.register.reset();
+          window.location.hash = '#dashboard';
+        } else {
+          // Email verification enabled
+          alert("Account registered successfully! Please check your email inbox to verify your account, then log in.");
+          this.authForms.register.reset();
+          this.switchAuthTab('login');
+          window.location.hash = '#auth';
+        }
+      } catch (err) {
+        console.error('Supabase registration error:', err);
+        const errEl = document.getElementById('register-general-error');
+        errEl.textContent = err.message || "Failed to create account. Email may already be registered.";
+        errEl.style.display = 'block';
+      } finally {
+        regBtn.disabled = false;
+        regBtn.innerHTML = originalText;
+      }
+    } else {
+      // Local Auth Fallback
+      const existing = LocalDB.getUserByEmail(email);
+      if (existing) {
+        const err = document.getElementById('register-general-error');
+        err.textContent = "Email address already registered. Please log in.";
+        err.style.display = 'block';
+        return;
+      }
+
+      LocalDB.saveUser({
+        email,
+        password,
+        createdAt: new Date().toISOString()
+      });
+
+      LocalDB.setCurrentUser(email);
+      this.currentUser = email;
+      document.getElementById('user-display-email').textContent = email;
+      this.authForms.register.reset();
+      window.location.hash = '#dashboard';
     }
-
-    // Create user
-    LocalDB.saveUser({
-      email,
-      password, // In a real app this would be hashed on the server side
-      createdAt: new Date().toISOString()
-    });
-
-    // Auto log in after sign up
-    LocalDB.setCurrentUser(email);
-    this.currentUser = email;
-    document.getElementById('user-display-email').textContent = email;
-
-    // Reset forms
-    this.authForms.register.reset();
-
-    // Route
-    window.location.hash = '#dashboard';
   },
 
-  logout() {
-    // Clear active timer ticking
+  async logout() {
     if (this.activeTimerInterval) {
       clearInterval(this.activeTimerInterval);
       this.activeTimerInterval = null;
     }
     this.activeTimerData = null;
 
-    LocalDB.clearCurrentUser();
+    if (DB.isCloud()) {
+      await supabaseClient.auth.signOut();
+    } else {
+      LocalDB.clearCurrentUser();
+    }
     this.currentUser = null;
     window.location.hash = '#home';
   },
 
   // ==========================================
-  // 5. SUBJECT MANAGEMENT
+  // 6. SUBJECT MANAGEMENT
   // ==========================================
-  handleAddSubjectSubmit(e) {
+  async handleAddSubjectSubmit(e) {
     e.preventDefault();
     const name = this.subjectNameInput.value.trim();
     const color = this.colorInput.value;
@@ -587,58 +856,59 @@ const App = {
       return;
     }
 
-    LocalDB.addSubject(this.currentUser, { name, color });
-    this.addSubjectDialog.close();
-    this.addSubjectForm.reset();
-
-    // Refresh UI
-    this.initDashboard();
+    try {
+      await DB.addSubject(this.currentUser, { name, color });
+      this.addSubjectDialog.close();
+      this.addSubjectForm.reset();
+      await this.initDashboard();
+    } catch (err) {
+      alert("Error adding subject: " + err.message);
+    }
   },
 
   // ==========================================
-  // 6. DASHBOARD & STREAK CONTROLLER
+  // 7. DASHBOARD & STREAK CONTROLLER
   // ==========================================
-  initDashboard() {
-    // Title greeting
-    const namePart = this.currentUser.split('@')[0];
+  async initDashboard() {
+    const user = await DB.getCurrentUser();
+    if (!user) return;
+
+    const namePart = user.email.split('@')[0];
     document.getElementById('dashboard-greeting').textContent = `Welcome back, ${namePart.charAt(0).toUpperCase() + namePart.slice(1)}!`;
     document.getElementById('dashboard-date').textContent = Utils.formatLocalDate(new Date().toISOString());
 
-    // Load Subjects
-    const subjects = LocalDB.getSubjects(this.currentUser);
-    const sessions = LocalDB.getStudySessions(this.currentUser);
+    try {
+      const subjects = await DB.getSubjects(this.currentUser);
+      const sessions = await DB.getStudySessions(this.currentUser);
 
-    // Calculate metrics
-    document.getElementById('subjects-count-value').textContent = subjects.length;
+      document.getElementById('subjects-count-value').textContent = subjects.length;
 
-    // Total Study today
-    const todayStr = Utils.toLocalISODate(new Date());
-    const todaySessions = sessions.filter(s => s.date === todayStr);
-    const todayTotalSeconds = todaySessions.reduce((acc, curr) => acc + curr.durationSeconds, 0);
-    document.getElementById('total-today-value').textContent = Utils.formatDurationShort(todayTotalSeconds);
+      // Total Study today
+      const todayStr = Utils.toLocalISODate(new Date());
+      const todaySessions = sessions.filter(s => s.date === todayStr);
+      const todayTotalSeconds = todaySessions.reduce((acc, curr) => acc + curr.durationSeconds, 0);
+      document.getElementById('total-today-value').textContent = Utils.formatDurationShort(todayTotalSeconds);
 
-    // Render Streak Dashboard Metric & Dot Tracker
-    const streak = this.calculateStreak(sessions);
-    document.getElementById('streak-value').textContent = `${streak} Day${streak === 1 ? '' : 's'}`;
-    
-    // Add glowing style to streak flame if streak > 0
-    const streakIconContainer = document.getElementById('streak-icon-container');
-    const streakFireIcon = document.getElementById('streak-fire-icon');
-    if (streak > 0) {
-      streakIconContainer.classList.add('streak-active');
-      streakFireIcon.style.color = 'var(--accent)';
-    } else {
-      streakIconContainer.classList.remove('streak-active');
-      streakFireIcon.style.color = 'var(--text-muted)';
+      // Render Streak Metric & Dot Tracker
+      const streak = this.calculateStreak(sessions);
+      document.getElementById('streak-value').textContent = `${streak} Day${streak === 1 ? '' : 's'}`;
+      
+      const streakIconContainer = document.getElementById('streak-icon-container');
+      const streakFireIcon = document.getElementById('streak-fire-icon');
+      if (streak > 0) {
+        streakIconContainer.classList.add('streak-active');
+        streakFireIcon.style.color = 'var(--accent)';
+      } else {
+        streakIconContainer.classList.remove('streak-active');
+        streakFireIcon.style.color = 'var(--text-muted)';
+      }
+
+      this.renderStreakDots(sessions);
+      this.renderSubjectsGrid(subjects, todaySessions);
+      this.checkAndResumeTimer(subjects);
+    } catch (err) {
+      console.error('Error initializing dashboard data:', err);
     }
-
-    this.renderStreakDots(sessions);
-
-    // Render Subject Grid
-    this.renderSubjectsGrid(subjects, todaySessions);
-
-    // Check and resume active timer if exists
-    this.checkAndResumeTimer();
   },
 
   renderSubjectsGrid(subjects, todaySessions) {
@@ -653,7 +923,6 @@ const App = {
     this.subjectsEmptyState.classList.add('hidden');
 
     subjects.forEach(subject => {
-      // Calculate today's time for this specific subject
       const subTodaySessions = todaySessions.filter(s => s.subjectId === subject.id);
       const subTodaySeconds = subTodaySessions.reduce((acc, curr) => acc + curr.durationSeconds, 0);
 
@@ -686,23 +955,25 @@ const App = {
         </div>
       `;
 
-      // Event: Delete Subject
-      card.querySelector('.delete-subject-btn').addEventListener('click', (e) => {
+      card.querySelector('.delete-subject-btn').addEventListener('click', async (e) => {
         e.stopPropagation();
         if (confirm(`Are you sure you want to delete "${subject.name}"? This will also wipe out all study logs for this subject.`)) {
-          LocalDB.deleteSubject(this.currentUser, subject.id);
-          this.initDashboard();
+          try {
+            await DB.deleteSubject(this.currentUser, subject.id);
+            await this.initDashboard();
+          } catch (err) {
+            alert("Error deleting subject: " + err.message);
+          }
         }
       });
 
-      // Event: Toggle timer
-      card.querySelector('.timer-toggle-btn').addEventListener('click', (e) => {
+      card.querySelector('.timer-toggle-btn').addEventListener('click', async (e) => {
         const btn = e.currentTarget;
         const subId = btn.getAttribute('data-id');
         const subName = btn.getAttribute('data-name');
         
         if (this.activeTimerData && this.activeTimerData.subjectId === subId) {
-          this.stopTimer();
+          await this.stopTimer();
         } else {
           this.startTimer(subId, subName);
         }
@@ -712,12 +983,9 @@ const App = {
     });
   },
 
-  // Calculate Streak
-  // Requirement: 1 hour (3600 seconds) study threshold daily.
   calculateStreak(sessions) {
     if (sessions.length === 0) return 0;
 
-    // Group study seconds by local YYYY-MM-DD date
     const dailyDurations = {};
     sessions.forEach(sess => {
       dailyDurations[sess.date] = (dailyDurations[sess.date] || 0) + sess.durationSeconds;
@@ -726,41 +994,33 @@ const App = {
     const targetSeconds = 3600; // 1 hour threshold
     let streakCount = 0;
     
-    // Create local timezone dates for consecutive analysis
     let checkDate = new Date();
     const todayStr = Utils.toLocalISODate(checkDate);
 
-    // Yesterday string
     const yesterdayDate = new Date();
     yesterdayDate.setDate(yesterdayDate.getDate() - 1);
     const yesterdayStr = Utils.toLocalISODate(yesterdayDate);
 
-    // Determine starting date for streak checks
-    // If today is completed, check starts from today.
-    // If today is NOT completed but yesterday WAS, check starts from yesterday.
-    // Otherwise streak is broken (0) or resets.
     let startStr = null;
     if ((dailyDurations[todayStr] || 0) >= targetSeconds) {
       startStr = todayStr;
     } else if ((dailyDurations[yesterdayStr] || 0) >= targetSeconds) {
       startStr = yesterdayStr;
     } else {
-      return 0; // Streak is 0 since neither yesterday nor today crossed the 1 hr threshold
+      return 0;
     }
 
     let currentCheckDate = new Date(startStr);
     
-    // Infinite loop threshold safety (max 365 days loop check)
     for (let i = 0; i < 365; i++) {
       const dateStr = Utils.toLocalISODate(currentCheckDate);
       const secondsStudied = dailyDurations[dateStr] || 0;
       
       if (secondsStudied >= targetSeconds) {
         streakCount++;
-        // Step backward 1 day
         currentCheckDate.setDate(currentCheckDate.getDate() - 1);
       } else {
-        break; // Streak broken
+        break;
       }
     }
 
@@ -771,15 +1031,12 @@ const App = {
     const grid = document.getElementById('streak-days-grid');
     grid.innerHTML = '';
 
-    // Group seconds by day
     const dailyDurations = {};
     sessions.forEach(sess => {
       dailyDurations[sess.date] = (dailyDurations[sess.date] || 0) + sess.durationSeconds;
     });
 
     const targetSeconds = 3600; // 1 hour threshold
-
-    // Generate past 7 days (ending in today)
     const days = [];
     const weekdayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     
@@ -813,30 +1070,30 @@ const App = {
   },
 
   // ==========================================
-  // 7. PERSISTENT FOCUS TIMER CONTROLLER
+  // 8. PERSISTENT FOCUS TIMER CONTROLLER
   // ==========================================
-  checkAndResumeTimer() {
-    const activeTimer = LocalDB.getActiveTimer(this.currentUser);
+  checkAndResumeTimer(subjectsList = null) {
+    const activeTimer = DB.getActiveTimer(this.currentUser);
     if (activeTimer) {
-      const subject = LocalDB.getSubjects(this.currentUser).find(s => s.id === activeTimer.subjectId);
-      if (subject) {
-        // Resume timer
-        this.activeTimerData = activeTimer;
-        this.startTimerTicker(subject.id, subject.name, activeTimer.startTime);
-      } else {
-        // Subject was deleted in the meantime
-        LocalDB.clearActiveTimer(this.currentUser);
-      }
+      const loadTimer = async () => {
+        const subjects = subjectsList || await DB.getSubjects(this.currentUser);
+        const subject = subjects.find(s => s.id === activeTimer.subjectId);
+        if (subject) {
+          this.activeTimerData = activeTimer;
+          this.startTimerTicker(subject.id, subject.name, activeTimer.startTime);
+        } else {
+          DB.clearActiveTimer(this.currentUser);
+        }
+      };
+      loadTimer();
     } else {
       this.resetTimerUI();
     }
   },
 
   startTimer(subjectId, subjectName) {
-    // Check if another timer is running
     if (this.activeTimerData) {
-      // Save the currently running timer session first
-      this.stopTimer(false); // Stop but don't refresh yet, we'll refresh after starting the new one
+      this.stopTimer(false);
     }
 
     const startTime = Date.now();
@@ -845,18 +1102,20 @@ const App = {
       startTime
     };
 
-    LocalDB.setActiveTimer(this.currentUser, timerData);
+    DB.setActiveTimer(this.currentUser, timerData);
     this.activeTimerData = timerData;
 
-    // Start ticker
     this.startTimerTicker(subjectId, subjectName, startTime);
     
-    // Refresh subject grid display states
-    const subjects = LocalDB.getSubjects(this.currentUser);
-    const sessions = LocalDB.getStudySessions(this.currentUser);
-    const todayStr = Utils.toLocalISODate(new Date());
-    const todaySessions = sessions.filter(s => s.date === todayStr);
-    this.renderSubjectsGrid(subjects, todaySessions);
+    // Refresh grid state
+    const refreshGrid = async () => {
+      const subjects = await DB.getSubjects(this.currentUser);
+      const sessions = await DB.getStudySessions(this.currentUser);
+      const todayStr = Utils.toLocalISODate(new Date());
+      const todaySessions = sessions.filter(s => s.date === todayStr);
+      this.renderSubjectsGrid(subjects, todaySessions);
+    };
+    refreshGrid();
   },
 
   startTimerTicker(subjectId, subjectName, startTime) {
@@ -864,7 +1123,6 @@ const App = {
       clearInterval(this.activeTimerInterval);
     }
 
-    // Set UI States
     this.timerContainer.classList.add('running');
     this.timerSubject.textContent = subjectName;
     this.timerStatusText.textContent = 'Stay Focused - Session Active';
@@ -874,33 +1132,26 @@ const App = {
       const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
       this.timerClock.textContent = Utils.formatDuration(elapsedSeconds);
 
-      // Radial progress ring calculation
-      // 1 hour focus block represents 1 full circle cycle for UI visual feedback, looping every hour.
       const circleSeconds = 3600;
       const progressPercent = (elapsedSeconds % circleSeconds) / circleSeconds;
-      const circumference = 502; // 2 * PI * r
+      const circumference = 502;
       const strokeOffset = circumference - (progressPercent * circumference);
       this.timerProgressRing.style.strokeDashoffset = strokeOffset;
     };
 
-    // Initial trigger
     updateTick();
-    
-    // Interval trigger
     this.activeTimerInterval = setInterval(updateTick, 1000);
   },
 
-  stopTimer(shouldRefreshDashboard = true) {
+  async stopTimer(shouldRefreshDashboard = true) {
     if (!this.activeTimerInterval || !this.activeTimerData) return;
 
-    // Clear ticker
     clearInterval(this.activeTimerInterval);
     this.activeTimerInterval = null;
 
     const endTime = Date.now();
     const elapsedSeconds = Math.floor((endTime - this.activeTimerData.startTime) / 1000);
 
-    // Save study session if it's at least 1 second
     if (elapsedSeconds >= 1) {
       const session = {
         subjectId: this.activeTimerData.subjectId,
@@ -909,17 +1160,20 @@ const App = {
         durationSeconds: elapsedSeconds,
         date: Utils.toLocalISODate(new Date(this.activeTimerData.startTime))
       };
-      LocalDB.addStudySession(this.currentUser, session);
+      
+      try {
+        await DB.addStudySession(this.currentUser, session);
+      } catch (err) {
+        alert("Error saving session: " + err.message);
+      }
     }
 
-    // Clear db storage
-    LocalDB.clearActiveTimer(this.currentUser);
+    DB.clearActiveTimer(this.currentUser);
     this.activeTimerData = null;
-
     this.resetTimerUI();
 
     if (shouldRefreshDashboard) {
-      this.initDashboard();
+      await this.initDashboard();
     }
   },
 
@@ -933,20 +1187,19 @@ const App = {
   },
 
   // ==========================================
-  // 8. WEEKLY REPORT & CUSTOM SVG CHARTING
+  // 9. WEEKLY REPORT & CUSTOM SVG CHARTING
   // ==========================================
-  initWeeklyReport() {
-    const subjects = LocalDB.getSubjects(this.currentUser);
-    const sessions = LocalDB.getStudySessions(this.currentUser);
+  async initWeeklyReport() {
+    try {
+      const subjects = await DB.getSubjects(this.currentUser);
+      const sessions = await DB.getStudySessions(this.currentUser);
 
-    // 1. Render custom SVG chart
-    this.renderWeeklySVGChart(subjects, sessions);
-
-    // 2. Generate insights
-    this.renderWeeklyInsights(subjects, sessions);
-
-    // 3. Render detailed history log
-    this.renderSessionHistory(subjects, sessions);
+      this.renderWeeklySVGChart(subjects, sessions);
+      this.renderWeeklyInsights(subjects, sessions);
+      this.renderSessionHistory(subjects, sessions);
+    } catch (err) {
+      console.error('Error loading weekly report:', err);
+    }
   },
 
   renderWeeklySVGChart(subjects, sessions) {
@@ -965,7 +1218,6 @@ const App = {
       return;
     }
 
-    // Generate past 7 days (ending in today)
     const dates = [];
     const shortDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     
@@ -978,8 +1230,7 @@ const App = {
       });
     }
 
-    // Group study seconds by Date + Subject ID
-    const chartData = {}; // { date: { subjectId: seconds } }
+    const chartData = {};
     dates.forEach(d => {
       chartData[d.dateStr] = {};
       subjects.forEach(s => {
@@ -993,7 +1244,6 @@ const App = {
       }
     });
 
-    // Find max total daily study hours to dynamically scale Y-Axis
     let maxDailyHours = 0;
     dates.forEach(d => {
       let dailySeconds = 0;
@@ -1006,13 +1256,11 @@ const App = {
       }
     });
 
-    // Determine Y-axis ceiling (minimum 4h, otherwise round up to nearest even integer)
     let yMax = 4;
     if (maxDailyHours > 4) {
       yMax = Math.ceil(maxDailyHours / 2) * 2;
     }
 
-    // Chart dimensions
     const width = 600;
     const height = 300;
     const paddingLeft = 45;
@@ -1023,13 +1271,11 @@ const App = {
     const plotWidth = width - paddingLeft - paddingRight;
     const plotHeight = height - paddingTop - paddingBottom;
 
-    // Draw Y-Axis Gridlines and Labels (4 intervals)
     const gridCount = 4;
     for (let i = 0; i <= gridCount; i++) {
       const yVal = (yMax / gridCount) * i;
       const yPos = paddingTop + plotHeight - (plotHeight * (i / gridCount));
 
-      // Grid line
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
       line.setAttribute('x1', paddingLeft);
       line.setAttribute('y1', yPos);
@@ -1040,7 +1286,6 @@ const App = {
       if (i > 0) line.setAttribute('stroke-dasharray', '4 4');
       chartSvg.appendChild(line);
 
-      // Label text
       const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       text.setAttribute('x', paddingLeft - 10);
       text.setAttribute('y', yPos + 4);
@@ -1052,7 +1297,6 @@ const App = {
       chartSvg.appendChild(text);
     }
 
-    // Draw X-Axis ticks and bars
     const colCount = dates.length;
     const colWidth = 28;
     const spacing = plotWidth / colCount;
@@ -1060,7 +1304,6 @@ const App = {
     dates.forEach((day, index) => {
       const xCenter = paddingLeft + (spacing * index) + (spacing / 2);
       
-      // Label text
       const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       text.setAttribute('x', xCenter);
       text.setAttribute('y', height - paddingBottom + 18);
@@ -1071,9 +1314,8 @@ const App = {
       text.textContent = day.label;
       chartSvg.appendChild(text);
 
-      // Draw Stacked Bars
       let runningYOffset = 0;
-      const subStackDetails = []; // For tooltips
+      const subStackDetails = [];
 
       subjects.forEach(subject => {
         const sec = chartData[day.dateStr][subject.id] || 0;
@@ -1090,11 +1332,10 @@ const App = {
         rect.setAttribute('width', colWidth);
         rect.setAttribute('height', rectHeight);
         rect.setAttribute('fill', subject.color);
-        rect.setAttribute('rx', '3'); // Slightly rounded columns
+        rect.setAttribute('rx', '3');
         rect.style.transition = 'opacity 0.2s';
         rect.style.cursor = 'pointer';
         
-        // Tooltip hover actions
         rect.addEventListener('mouseover', (e) => {
           this.showTooltip(e, day.dateStr, subStackDetails);
           rect.style.opacity = '0.8';
@@ -1107,7 +1348,6 @@ const App = {
 
         chartSvg.appendChild(rect);
 
-        // Keep stack details for tooltip content
         subStackDetails.push({
           name: subject.name,
           color: subject.color,
@@ -1117,7 +1357,6 @@ const App = {
         runningYOffset += rectHeight;
       });
 
-      // Cover invisible hovering rect across full column area to support date tooltip easily
       const hoverArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       hoverArea.setAttribute('x', xCenter - (spacing / 2));
       hoverArea.setAttribute('y', paddingTop);
@@ -1139,7 +1378,6 @@ const App = {
       chartSvg.appendChild(hoverArea);
     });
 
-    // Draw X and Y Axes Lines
     const xAxis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     xAxis.setAttribute('x1', paddingLeft);
     xAxis.setAttribute('y1', height - paddingBottom);
@@ -1158,9 +1396,7 @@ const App = {
     yAxis.setAttribute('stroke-width', '1.5');
     chartSvg.appendChild(yAxis);
 
-    // Draw Legends
     subjects.forEach(subject => {
-      // Only show legend if the subject has actually been studied or is active
       const legend = document.createElement('div');
       legend.className = 'legend-item';
       legend.innerHTML = `
@@ -1176,7 +1412,6 @@ const App = {
     const dateEl = document.getElementById('tooltip-date');
     const subjectsEl = document.getElementById('tooltip-subjects');
     
-    // Parse date
     const formattedDate = new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     dateEl.textContent = formattedDate;
     
@@ -1184,7 +1419,6 @@ const App = {
     if (stackDetails.length === 0) {
       subjectsEl.innerHTML = '<div style="color:var(--text-muted); font-size: 0.75rem;">No study sessions</div>';
     } else {
-      // Sort largest hours first
       [...stackDetails].sort((a,b) => b.hours - a.hours).forEach(item => {
         const row = document.createElement('div');
         row.style.display = 'flex';
@@ -1202,7 +1436,6 @@ const App = {
       });
     }
 
-    // Set position relative to the chart-container parent
     const rect = document.getElementById('weekly-chart-box').getBoundingClientRect();
     const tooltipWidth = 140;
     const tooltipHeight = 60 + (stackDetails.length * 16);
@@ -1210,7 +1443,6 @@ const App = {
     let x = e.clientX - rect.left + 15;
     let y = e.clientY - rect.top - tooltipHeight - 15;
 
-    // Check bounds
     if (x + tooltipWidth > rect.width) x = e.clientX - rect.left - tooltipWidth - 15;
     if (y < 0) y = e.clientY - rect.top + 15;
 
@@ -1235,7 +1467,6 @@ const App = {
       return;
     }
 
-    // Weekly durations grouped by subject
     const subjectTimes = {};
     let totalSeconds = 0;
     const past7Days = [];
@@ -1246,18 +1477,15 @@ const App = {
     }
 
     sessions.forEach(sess => {
-      // Only include last 7 days for weekly report insights
       if (past7Days.includes(sess.date)) {
         subjectTimes[sess.subjectId] = (subjectTimes[sess.subjectId] || 0) + sess.durationSeconds;
         totalSeconds += sess.durationSeconds;
       }
     });
 
-    // 1. Total weekly study hours
     const totalWeeklyHours = totalSeconds / 3600;
     totalHoursEl.innerHTML = `You completed <strong>${totalWeeklyHours.toFixed(1)} hours</strong> of study this week.`;
 
-    // 2. Top Subject
     let topSubId = null;
     let maxSeconds = 0;
     Object.keys(subjectTimes).forEach(subId => {
@@ -1279,7 +1507,6 @@ const App = {
       topSubjectEl.textContent = 'No session logged yet';
     }
 
-    // 3. Streak status details
     const streak = this.calculateStreak(sessions);
     if (streak > 0) {
       streakDaysEl.innerHTML = `Awesome! You have kept a <strong>${streak} day streak</strong> alive. Keep it up!`;
@@ -1303,7 +1530,6 @@ const App = {
       return;
     }
 
-    // Sort sessions newest first
     const sorted = [...sessions].sort((a,b) => b.startTime - a.startTime);
 
     sorted.forEach(sess => {
@@ -1334,14 +1560,13 @@ const App = {
         </td>
       `;
 
-      row.querySelector('.delete-session-btn').addEventListener('click', () => {
+      row.querySelector('.delete-session-btn').addEventListener('click', async () => {
         if (confirm('Are you sure you want to delete this study session record? This cannot be undone.')) {
-          LocalDB.deleteStudySession(this.currentUser, sess.id);
-          this.initWeeklyReport();
-          
-          // Also check dashboard sync in case we modified today's times
-          if (window.location.hash === '#report') {
-            // Simply trigger insights updates
+          try {
+            await DB.deleteStudySession(this.currentUser, sess.id);
+            await this.initWeeklyReport();
+          } catch (err) {
+            alert("Error deleting session: " + err.message);
           }
         }
       });
@@ -1351,7 +1576,7 @@ const App = {
   }
 };
 
-// Start application when DOM Content is loaded
+// Start application
 document.addEventListener('DOMContentLoaded', () => {
   App.init();
 });
