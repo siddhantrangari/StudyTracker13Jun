@@ -7,7 +7,7 @@
   <title>StudyTrack - Smart Prep Tracker for UPSC, JEE, & NEET</title>
   
   <!-- Styling -->
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=2">
   
   <!-- FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -249,7 +249,7 @@
               <div class="dashboard-main-col">
                 <div class="subjects-section-header">
                   <h3>My Core Subjects</h3>
-                  <button class="btn btn-primary btn-sm" id="open-add-subject-btn" commandfor="add-subject-dialog" command="show-modal">
+                  <button class="btn btn-primary btn-sm" id="open-add-subject-btn">
                     <i class="fa-solid fa-plus"></i> Add Subject
                   </button>
                 </div>
@@ -261,7 +261,7 @@
                     <i class="fa-solid fa-book-open" style="font-size: 3rem; color: var(--text-muted); margin-bottom: 1rem;"></i>
                     <h4>No Subjects Tracked Yet</h4>
                     <p class="hero-subtitle mt-4 mb-2" style="font-size: 0.95rem;">Add subjects you are preparing for (like Physics, Geography, etc.) to start tracking your study hours.</p>
-                    <button class="btn btn-primary btn-sm mt-4" commandfor="add-subject-dialog" command="show-modal">
+                    <button class="btn btn-primary btn-sm mt-4" id="empty-add-subject-btn">
                       <i class="fa-solid fa-plus"></i> Add First Subject
                     </button>
                   </div>
@@ -463,7 +463,7 @@
   </dialog>
 
   <!-- Script logic -->
-  <script type="module" src="app.js"></script>
+  <script type="module" src="app.js?v=2"></script>
 
 </body>
 </html>

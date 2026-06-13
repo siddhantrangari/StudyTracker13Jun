@@ -178,12 +178,7 @@ const DB = {
           .eq('id', userId)
           .maybeSingle();
         if (error) throw error;
-        if (!data) {
-          // Auto-initialize profile record
-          await supabaseClient.from('profiles').insert([{ id: userId, is_premium: false }]);
-          return false;
-        }
-        return !!data.is_premium;
+        return data ? !!data.is_premium : false;
       } catch (err) {
         console.error('Error fetching profiles premium status:', err);
         return false;
@@ -514,32 +509,45 @@ const App = {
       }
     });
 
-    document.addEventListener('click', async (e) => {
-      const button = e.target.closest('button[commandfor]');
-      if (!button) return;
+    // Add Subject buttons handlers
+    const openSubjectModal = async (e) => {
+      e?.preventDefault();
+      try {
+        const subjects = await DB.getSubjects(this.currentUser);
+        const isPremium = await DB.isPremium(this.currentUser);
+        
+        if (!isPremium && subjects.length >= 2) {
+          alert("Free accounts are limited to a maximum of 2 subjects. Upgrade to Premium to track unlimited subjects!");
+          this.triggerRazorpayPayment();
+          return;
+        }
 
-      const dialogId = button.getAttribute('commandfor');
-      const command = button.getAttribute('command');
-      const dialog = document.getElementById(dialogId);
+        this.subjectNameInput.value = '';
+        document.getElementById('subject-name-error').style.display = 'none';
+        this.resetColorSelection();
+        this.addSubjectDialog.showModal();
+      } catch (err) {
+        console.error("Error checking subject limit:", err);
+      }
+    };
 
-      if (dialog && dialog.tagName === 'DIALOG') {
-        if (command === 'show-modal') {
-          // Free subject count limit check
-          const subjects = await DB.getSubjects(this.currentUser);
-          const isPremium = await DB.isPremium(this.currentUser);
-          
-          if (!isPremium && subjects.length >= 2) {
-            alert("Free accounts are limited to a maximum of 2 subjects. Upgrade to Premium to track unlimited subjects!");
-            this.triggerRazorpayPayment();
-            return;
-          }
-
-          this.subjectNameInput.value = '';
-          document.getElementById('subject-name-error').style.display = 'none';
-          this.resetColorSelection();
-          dialog.showModal();
-        } else if (command === 'close') {
-          dialog.close();
+    const headerBtn = document.getElementById('open-add-subject-btn');
+    if (headerBtn) {
+      headerBtn.addEventListener('click', openSubjectModal);
+    }
+    
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#empty-add-subject-btn')) {
+        openSubjectModal(e);
+      }
+      
+      // Handle closing of dialogs using command attributes
+      const closeBtn = e.target.closest('button[command="close"]');
+      if (closeBtn) {
+        const targetId = closeBtn.getAttribute('commandfor');
+        const target = document.getElementById(targetId);
+        if (target && target.tagName === 'DIALOG') {
+          target.close();
         }
       }
     });
