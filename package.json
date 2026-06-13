@@ -1,0 +1,22 @@
+{
+  "name": "studytrack",
+  "version": "1.0.0",
+  "description": "Smart study tracker for competitive exam aspirants",
+  "main": "index.html",
+  "type": "module",
+  "scripts": {
+    "dev": "npx -y http-server -p 3000 -o"
+  },
+  "keywords": [
+    "study",
+    "tracker",
+    "upsc",
+    "jee",
+    "neet"
+  ],
+  "author": "StudyTrack Team",
+  "license": "ISC",
+  "dependencies": {
+    "pg": "^8.21.0"
+  }
+}

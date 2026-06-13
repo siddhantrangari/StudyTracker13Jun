@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="StudyTrack - Empowering UPSC, JEE, and NEET aspirants to track subjects, manage daily schedules, maintain study streaks, and visual progress metrics.">
+  <title>StudyTrack - Smart Prep Tracker for UPSC, JEE, & NEET</title>
+  
+  <!-- Styling -->
+  <link rel="stylesheet" href="styles.css">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+  <!-- Decorative glow layers -->
+  <div class="bg-glow-1"></div>
+  <div class="bg-glow-2"></div>
+
+  <!-- App Wrapper -->
+  <div id="app-root">
+    
+    <!-- Site Header -->
+    <header class="site-header">
+      <div class="header-container">
+        <a href="#home" class="logo-wrapper" id="logo-link">
+          <i class="fa-solid fa-graduation-cap logo-icon"></i>
+          <span>StudyTrack</span>
+        </a>
+        
+        <!-- Public Navigation (hidden when logged in) -->
+        <nav id="public-nav">
+          <ul class="nav-links">
+            <li><a href="#home" class="nav-link" id="nav-home">Home</a></li>
+            <li><button class="btn btn-secondary btn-sm" id="nav-login-btn">Log In</button></li>
+            <li><button class="btn btn-primary btn-sm" id="nav-register-btn">Sign Up</button></li>
+          </ul>
+        </nav>
+        
+        <!-- Private Mini Profile (shown when logged in) -->
+        <nav id="private-nav" class="hidden">
+          <ul class="nav-links">
+            <li>
+              <button class="btn btn-secondary btn-sm" id="top-logout-btn">
+                <i class="fa-solid fa-right-from-bracket"></i> Log Out
+              </button>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </header>
+
+    <!-- 1. LANDING VIEW -->
+    <main class="view-section active" id="landing-view">
+      <div class="landing-view">
+        <section class="hero-section">
+          <div class="badge-exam">Built for UPSC, JEE, NEET Aspirants</div>
+          <h1 class="hero-title">Master Your Exam Prep With <span>Disciplined Tracking</span></h1>
+          <p class="hero-subtitle">
+            StudyTrack is a dedicated dashboard designed for Indian competitive exam aspirants. 
+            Manage your daily study targets, log your active hours with live timers, build unstoppable study streaks, 
+            and visual your preparation analytics.
+          </p>
+          <div class="hero-ctas">
+            <button class="btn btn-primary" id="hero-get-started">Get Started Free <i class="fa-solid fa-arrow-right"></i></button>
+            <a href="#benefits" class="btn btn-secondary" id="hero-learn-more">Learn More</a>
+          </div>
+        </section>
+
+        <!-- Benefits Section -->
+        <section class="benefits-section" id="benefits">
+          <div class="section-header">
+            <h2>Why StudyTrack Works</h2>
+            <p class="hero-subtitle">Transform your exam preparation from chaotic sessions to a structural, target-driven routine.</p>
+          </div>
+          
+          <div class="benefits-grid">
+            <div class="card benefit-card">
+              <div class="benefit-icon-box">
+                <i class="fa-solid fa-book-open"></i>
+              </div>
+              <h3>Syllabus & Subject Control</h3>
+              <p>Divide your massive exam syllabus into subjects (Physics, Chemistry, History, etc.). Keep key topics organized and focused without losing sight of the bigger picture.</p>
+            </div>
+            
+            <div class="card benefit-card">
+              <div class="benefit-icon-box">
+                <i class="fa-solid fa-stopwatch"></i>
+              </div>
+              <h3>Live Focus Timers</h3>
+              <p>Start a timer when you sit down to study a subject and stop it when you take a break. Our persistent timer keeps running even if you refresh the page or step away.</p>
+            </div>
+            
+            <div class="card benefit-card">
+              <div class="benefit-icon-box">
+                <i class="fa-solid fa-chart-line"></i>
+              </div>
+              <h3>Weekly Progress Insights</h3>
+              <p>Review beautiful interactive breakdown charts of your studies over the last 7 days. Understand which subjects require more hours to fine-tune your exam prep.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- 2. AUTH VIEW (LOGIN & REGISTER) -->
+    <section class="view-section" id="auth-view">
+      <div class="auth-view">
+        <div class="card auth-card">
+          <div class="auth-tabs">
+            <div class="auth-tab active" id="tab-login" role="button">Log In</div>
+            <div class="auth-tab" id="tab-register" role="button">Create Account</div>
+          </div>
+
+          <!-- LOGIN FORM -->
+          <div class="auth-form-wrapper active" id="form-login-wrapper">
+            <form id="login-form" novalidate>
+              <div class="form-group">
+                <label for="login-email">Email Address</label>
+                <input type="email" id="login-email" class="form-control" placeholder="name@email.com" required>
+                <div class="form-error" id="login-email-error">Please enter a valid email address.</div>
+              </div>
+              <div class="form-group">
+                <label for="login-password">Password</label>
+                <input type="password" id="login-password" class="form-control" placeholder="••••••••" required>
+                <div class="form-error" id="login-password-error">Password must be at least 6 characters.</div>
+              </div>
+              <div class="form-error mt-4" id="login-general-error" style="display: none;">Invalid credentials. Please try again.</div>
+              <button type="submit" class="btn btn-primary w-full mt-4" style="width: 100%;">
+                Log In <i class="fa-solid fa-right-to-bracket"></i>
+              </button>
+            </form>
+          </div>
+
+          <!-- REGISTER FORM -->
+          <div class="auth-form-wrapper" id="form-register-wrapper">
+            <form id="register-form" novalidate>
+              <div class="form-group">
+                <label for="register-email">Email Address</label>
+                <input type="email" id="register-email" class="form-control" placeholder="name@email.com" required>
+                <div class="form-error" id="register-email-error">Please enter a valid email address.</div>
+              </div>
+              <div class="form-group">
+                <label for="register-password">Password</label>
+                <input type="password" id="register-password" class="form-control" placeholder="Minimum 6 characters" required>
+                <div class="form-error" id="register-password-error">Password must be at least 6 characters long.</div>
+              </div>
+              <div class="form-group">
+                <label for="register-confirm-password">Confirm Password</label>
+                <input type="password" id="register-confirm-password" class="form-control" placeholder="••••••••" required>
+                <div class="form-error" id="register-confirm-password-error">Passwords do not match.</div>
+              </div>
+              <div class="form-error mt-4" id="register-general-error" style="display: none;">Email already exists.</div>
+              <button type="submit" class="btn btn-accent w-full mt-4" style="width: 100%;">
+                Create Account <i class="fa-solid fa-user-plus"></i>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. PRIVATE APP WORKSPACE -->
+    <section class="view-section" id="app-view">
+      <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+          <ul class="sidebar-nav">
+            <li>
+              <a href="#dashboard" class="sidebar-link active" id="side-dashboard">
+                <i class="fa-solid fa-house"></i> Dashboard
+              </a>
+            </li>
+            <li>
+              <a href="#report" class="sidebar-link" id="side-report">
+                <i class="fa-solid fa-chart-column"></i> Weekly Report
+              </a>
+            </li>
+          </ul>
+          
+          <div class="user-profile-menu">
+            <div class="user-info">
+              <span class="user-email" id="user-display-email">student@studytrack.in</span>
+              <span class="user-role">Aspirant Workspace</span>
+            </div>
+            <button class="btn btn-danger btn-sm w-full" id="side-logout-btn" style="width: 100%;">
+              <i class="fa-solid fa-right-from-bracket"></i> Log Out
+            </button>
+          </div>
+        </aside>
+
+        <!-- Main Content Panel -->
+        <main class="main-content">
+          
+          <!-- A. DASHBOARD PANEL -->
+          <div id="dashboard-panel" class="app-panel">
+            <header class="panel-header mb-2">
+              <h2 id="dashboard-greeting">Welcome back, Scholar!</h2>
+              <p class="hero-subtitle" id="dashboard-date">Saturday, June 13, 2026</p>
+            </header>
+
+            <!-- Stats Bar -->
+            <div class="stats-grid">
+              <!-- Streak Tracker -->
+              <div class="card stat-card" id="streak-card">
+                <div class="stat-icon streak-icon-box" id="streak-icon-container">
+                  <i class="fa-solid fa-fire" id="streak-fire-icon"></i>
+                </div>
+                <div class="stat-details">
+                  <span class="stat-value" id="streak-value">0 Days</span>
+                  <span class="stat-label">Study Streak</span>
+                </div>
+              </div>
+              
+              <!-- Total Today -->
+              <div class="card stat-card">
+                <div class="stat-icon" style="background: rgba(99, 102, 241, 0.1); color: var(--primary);">
+                  <i class="fa-solid fa-clock"></i>
+                </div>
+                <div class="stat-details">
+                  <span class="stat-value" id="total-today-value">0h 00m</span>
+                  <span class="stat-label">Studied Today</span>
+                </div>
+              </div>
+
+              <!-- Subjects Count -->
+              <div class="card stat-card">
+                <div class="stat-icon" style="background: rgba(236, 72, 153, 0.1); color: var(--secondary);">
+                  <i class="fa-solid fa-book-open"></i>
+                </div>
+                <div class="stat-details">
+                  <span class="stat-value" id="subjects-count-value">0</span>
+                  <span class="stat-label">Active Subjects</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dashboard Columns -->
+            <div class="dashboard-grid">
+              
+              <!-- Left Column: Subjects list -->
+              <div class="dashboard-main-col">
+                <div class="subjects-section-header">
+                  <h3>My Core Subjects</h3>
+                  <button class="btn btn-primary btn-sm" id="open-add-subject-btn" commandfor="add-subject-dialog" command="show-modal">
+                    <i class="fa-solid fa-plus"></i> Add Subject
+                  </button>
+                </div>
+                
+                <!-- Subjects Grid -->
+                <div class="subjects-grid" id="subjects-grid">
+                  <!-- Empty State -->
+                  <div class="card text-center" id="subjects-empty-state" style="grid-column: 1 / -1; padding: 3rem 1.5rem;">
+                    <i class="fa-solid fa-book-open" style="font-size: 3rem; color: var(--text-muted); margin-bottom: 1rem;"></i>
+                    <h4>No Subjects Tracked Yet</h4>
+                    <p class="hero-subtitle mt-4 mb-2" style="font-size: 0.95rem;">Add subjects you are preparing for (like Physics, Geography, etc.) to start tracking your study hours.</p>
+                    <button class="btn btn-primary btn-sm mt-4" commandfor="add-subject-dialog" command="show-modal">
+                      <i class="fa-solid fa-plus"></i> Add First Subject
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right Column: Active timer and Streak details -->
+              <div class="dashboard-side-col" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                
+                <!-- Live Study Timer -->
+                <div class="card timer-container" id="study-timer-container">
+                  <div class="pulse-glow"></div>
+                  <h3>Focus Session Timer</h3>
+                  <p class="hero-subtitle mb-2" id="timer-status-text">Select a subject below to start a timer</p>
+                  
+                  <div class="timer-ring-box">
+                    <svg class="timer-circle-svg" viewBox="0 0 180 180">
+                      <defs>
+                        <linearGradient id="timer-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stop-color="var(--primary)" />
+                          <stop offset="100%" stop-color="var(--secondary)" />
+                        </linearGradient>
+                      </defs>
+                      <circle class="timer-circle-bg" cx="90" cy="90" r="80"></circle>
+                      <circle class="timer-circle-progress" id="timer-progress-ring" cx="90" cy="90" r="80"></circle>
+                    </svg>
+                    <div class="timer-display">
+                      <span class="timer-clock" id="timer-clock-display">00:00:00</span>
+                      <span class="timer-subject-name" id="timer-subject-display">No Subject</span>
+                    </div>
+                  </div>
+
+                  <div class="timer-controls">
+                    <button class="btn btn-danger hidden" id="timer-stop-btn">
+                      <i class="fa-solid fa-square"></i> Stop
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Streak Details Panel -->
+                <div class="card streak-details-card">
+                  <h3>Streak Progress</h3>
+                  <p class="streak-target-status" id="streak-description-text">
+                    Study for at least <strong>1 hour</strong> daily to maintain your study streak. Keep the fire burning!
+                  </p>
+                  
+                  <div class="streak-tracker-grid" id="streak-days-grid">
+                    <!-- Dynamic rendering of past 7 days dots -->
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <!-- B. WEEKLY REPORT PANEL -->
+          <div id="report-panel" class="app-panel hidden">
+            <header class="report-header">
+              <h2>Weekly Study Analysis</h2>
+              <p class="hero-subtitle">Review your hours studied per subject for the past 7 days.</p>
+            </header>
+
+            <div class="report-grid">
+              
+              <!-- Left Column: Custom SVG Weekly Chart -->
+              <div class="card chart-card">
+                <h3>Subject Distribution (Last 7 Days)</h3>
+                
+                <div class="chart-container" id="weekly-chart-box">
+                  <div class="chart-tooltip" id="chart-tooltip">
+                    <div class="chart-tooltip-date" id="tooltip-date">June 12</div>
+                    <div class="chart-tooltip-subjects" id="tooltip-subjects">
+                      <!-- Dynamic list of subject -> hours -->
+                    </div>
+                  </div>
+                  
+                  <!-- Dynamic SVG Chart rendered here -->
+                  <svg class="svg-chart" id="weekly-svg-chart" viewBox="0 0 600 300" preserveAspectRatio="xMidYMid meet">
+                    <!-- Dynamic rendering of axes, grids, labels, and stacked/grouped columns -->
+                  </svg>
+                </div>
+                
+                <!-- Chart Legend -->
+                <div class="chart-legend" id="chart-legend">
+                  <!-- Dynamic legend entries -->
+                </div>
+              </div>
+
+              <!-- Right Column: Study Insights and totals -->
+              <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <!-- Study Insights -->
+                <div class="card">
+                  <h3>Prep Insights</h3>
+                  <div style="display: flex; flex-direction: column; gap: 1.25rem; margin-top: 1.25rem;">
+                    
+                    <div style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                      <div class="benefit-icon-box" style="width:36px; height:36px; font-size:1rem; flex-shrink:0;">
+                        <i class="fa-solid fa-trophy"></i>
+                      </div>
+                      <div>
+                        <h4 style="font-size:0.95rem;">Top Subject This Week</h4>
+                        <p class="hero-subtitle mt-4" style="font-size:0.85rem;" id="insight-top-subject">No session logged yet</p>
+                      </div>
+                    </div>
+
+                    <div style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                      <div class="benefit-icon-box" style="width:36px; height:36px; font-size:1rem; flex-shrink:0; background:rgba(16, 185, 129, 0.15); color:var(--success); border-color:rgba(16, 185, 129, 0.25);">
+                        <i class="fa-solid fa-chart-line"></i>
+                      </div>
+                      <div>
+                        <h4 style="font-size:0.95rem;">Weekly Study Duration</h4>
+                        <p class="hero-subtitle mt-4" style="font-size:0.85rem;" id="insight-total-hours">0 hours study time total</p>
+                      </div>
+                    </div>
+
+                    <div style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                      <div class="benefit-icon-box" style="width:36px; height:36px; font-size:1rem; flex-shrink:0; background:rgba(249, 115, 22, 0.15); color:var(--accent); border-color:rgba(249, 115, 22, 0.25);">
+                        <i class="fa-solid fa-fire"></i>
+                      </div>
+                      <div>
+                        <h4 style="font-size:0.95rem;">Streak Threshold reached</h4>
+                        <p class="hero-subtitle mt-4" style="font-size:0.85rem;" id="insight-streak-days">Study for 1 hr in a day to build a streak.</p>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Recent Sessions History -->
+            <div class="card history-card">
+              <div class="history-header">
+                <h3>Detailed Session Log</h3>
+              </div>
+              
+              <div class="history-table-container">
+                <table class="history-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Subject</th>
+                      <th>Started At</th>
+                      <th>Duration</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="session-history-body">
+                    <!-- Session rows inserted dynamically -->
+                    <tr>
+                      <td colspan="5" class="text-center" style="padding: 2.5rem 1rem; color: var(--text-muted);">
+                        No study sessions logged yet.
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+
+        </main>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- DIALOGS (MODALS) -->
+  
+  <!-- Add Subject Dialog -->
+  <dialog id="add-subject-dialog" class="modal">
+    <div class="modal-header">
+      <h3>Add New Subject</h3>
+      <button class="modal-close" commandfor="add-subject-dialog" command="close">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    
+    <form id="add-subject-form" method="dialog">
+      <div class="form-group">
+        <label for="subject-name-input">Subject Name</label>
+        <input type="text" id="subject-name-input" class="form-control" placeholder="e.g., Physics, History, Botany" required maxlength="30">
+        <div class="form-error" id="subject-name-error">Please enter a valid subject name.</div>
+      </div>
+      
+      <div class="form-group">
+        <label>Subject Label Color</label>
+        <div class="color-picker-grid" id="color-picker-grid">
+          <!-- 6 curated colors will be loaded here dynamically -->
+        </div>
+        <input type="hidden" id="subject-color-input" value="#6366f1">
+      </div>
+      
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary btn-sm" commandfor="add-subject-dialog" command="close">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm">Add Subject</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Script logic -->
+  <script type="module" src="app.js"></script>
+
+</body>
+</html>
