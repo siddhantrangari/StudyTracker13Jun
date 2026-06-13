@@ -52,21 +52,13 @@ By default, StudyTrack operates in **Offline Demo Mode** (data is saved locally 
 3. Click **New Query**, paste the following SQL script, and click **Run**:
 
 ```sql
--- Drop existing policies if they exist to prevent duplicate creation errors
-DROP POLICY IF EXISTS "Users can view their own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Users can insert their own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Users can manage their own subjects" ON public.subjects;
-DROP POLICY IF EXISTS "Users can manage their own sessions" ON public.study_sessions;
-
--- 1. Create profiles table (User Subscription States)
+-- 1. Create tables first (so relations exist before policy drops)
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   is_premium BOOLEAN DEFAULT FALSE,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. Create subjects table
 CREATE TABLE IF NOT EXISTS public.subjects (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
@@ -75,7 +67,6 @@ CREATE TABLE IF NOT EXISTS public.subjects (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. Create study_sessions table
 CREATE TABLE IF NOT EXISTS public.study_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
@@ -86,6 +77,13 @@ CREATE TABLE IF NOT EXISTS public.study_sessions (
   date DATE NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 2. Drop existing policies to prevent duplicate creation errors
+DROP POLICY IF EXISTS "Users can view their own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Users can insert their own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Users can manage their own subjects" ON public.subjects;
+DROP POLICY IF EXISTS "Users can manage their own sessions" ON public.study_sessions;
 
 -- 4. Enable Row Level Security (RLS)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
