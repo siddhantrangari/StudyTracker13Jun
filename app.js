@@ -8,7 +8,7 @@
 // ==========================================
 // Paste your Supabase credentials here to sync to the database
 const SUPABASE_URL = 'https://qoxchejkzofmertijutx.supabase.co';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'; // Replace with your actual anon public key from Supabase settings
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFveGNoZWprem9mbWVydGlqdXR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzMzA3MTQsImV4cCI6MjA5NjkwNjcxNH0.uK9mB0_Dl-ctUWU8ffE1-ZCZyV1f-Iu3gXb5gbXerws'; // Replace with your actual anon public key from Supabase settings
 
 let supabaseClient = null;
 const isSupabaseConfigured = SUPABASE_ANON_KEY && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
